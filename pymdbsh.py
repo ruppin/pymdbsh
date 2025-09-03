@@ -51,15 +51,23 @@ class MongoCLI:
 
     def connect(self, conn_name):
         cfg = self.configs[conn_name]
-        if 'connection_string' in cfg and cfg['connection_string']:
-            self.client = pymongo.MongoClient(cfg['connection_string'])
-        else:
-            uri = f"mongodb://{cfg['host']}:{cfg['port']}/"
-            if cfg.get('username') and cfg.get('password'):
-                uri = f"mongodb://{cfg['username']}:{cfg['password']}@{cfg['host']}:{cfg['port']}/"
-            self.client = pymongo.MongoClient(uri)
-        self.db = self.client[cfg['database']]
-        self.current_conn = conn_name
+        try:
+            if 'connection_string' in cfg and cfg['connection_string']:
+                self.client = pymongo.MongoClient(cfg['connection_string'], serverSelectionTimeoutMS=5000)
+            else:
+                uri = f"mongodb://{cfg['host']}:{cfg['port']}/"
+                if cfg.get('username') and cfg.get('password'):
+                    uri = f"mongodb://{cfg['username']}:{cfg['password']}@{cfg['host']}:{cfg['port']}/"
+                self.client = pymongo.MongoClient(uri, serverSelectionTimeoutMS=5000)
+            # Attempt to fetch server info to trigger connection
+            self.client.server_info()
+            self.db = self.client[cfg['database']]
+            self.current_conn = conn_name
+        except Exception as e:
+            print(f"Connection to '{conn_name}' failed: {e}")
+            self.client = None
+            self.db = None
+            self.current_conn = None
 
     def substitute_vars(self, text):
         for k, v in self.variables.items():
