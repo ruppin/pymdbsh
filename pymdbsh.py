@@ -51,10 +51,13 @@ class MongoCLI:
 
     def connect(self, conn_name):
         cfg = self.configs[conn_name]
-        uri = f"mongodb://{cfg['host']}:{cfg['port']}/"
-        if cfg['username'] and cfg['password']:
-            uri = f"mongodb://{cfg['username']}:{cfg['password']}@{cfg['host']}:{cfg['port']}/"
-        self.client = pymongo.MongoClient(uri)
+        if 'connection_string' in cfg and cfg['connection_string']:
+            self.client = pymongo.MongoClient(cfg['connection_string'])
+        else:
+            uri = f"mongodb://{cfg['host']}:{cfg['port']}/"
+            if cfg.get('username') and cfg.get('password'):
+                uri = f"mongodb://{cfg['username']}:{cfg['password']}@{cfg['host']}:{cfg['port']}/"
+            self.client = pymongo.MongoClient(uri)
         self.db = self.client[cfg['database']]
         self.current_conn = conn_name
 
