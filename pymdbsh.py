@@ -62,7 +62,7 @@ class MongoCLI:
         cfg = self.configs[conn_name]
         try:
             if 'connection_string' in cfg and cfg['connection_string']:
-                self.client = pymongo.MongoClient(cfg['connection_string'],datetime_conversion='DATETIME_AUTO' serverSelectionTimeoutMS=5000)
+                self.client = pymongo.MongoClient(cfg['connection_string'],datetime_conversion='DATETIME_AUTO', serverSelectionTimeoutMS=5000)
             else:
                 uri = f"mongodb://{cfg['host']}:{cfg['port']}/"
                 if cfg.get('username') and cfg.get('password'):
