@@ -359,5 +359,5 @@ def sql_to_mongo(sql):
     return mongo_cmd
 
 if __name__ == '__main__':
-    cli = MongoCLI('~/.mongo_cli.conf')
+    cli = MongoCLI('~/.pymdbsh.conf')
     cli.run_session()
