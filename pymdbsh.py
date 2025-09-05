@@ -8,6 +8,7 @@ import json
 import re
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
+from bson import json_util
 
 class MongoCLI:
     def __init__(self, config_file_path):
@@ -61,7 +62,7 @@ class MongoCLI:
         cfg = self.configs[conn_name]
         try:
             if 'connection_string' in cfg and cfg['connection_string']:
-                self.client = pymongo.MongoClient(cfg['connection_string'], serverSelectionTimeoutMS=5000)
+                self.client = pymongo.MongoClient(cfg['connection_string'],datetime_conversion='DATETIME_AUTO' serverSelectionTimeoutMS=5000)
             else:
                 uri = f"mongodb://{cfg['host']}:{cfg['port']}/"
                 if cfg.get('username') and cfg.get('password'):
@@ -160,7 +161,7 @@ class MongoCLI:
             filename = filename.strip()
             result = self.execute_command(cmd, return_result=True)
             with open(filename, 'w', encoding='utf-8') as f:
-                json.dump(result, f, indent=2, ensure_ascii=False)
+                f.write(json_util.dumps(result, indent=2, ensure_ascii=False))
             print(f"Output written to {filename}")
         elif '|' in line:
             cmd, pipe_cmd = line.split('|', 1)
@@ -215,7 +216,7 @@ class MongoCLI:
                 if method == 'find':
                     cursor = coll.find(*args)
                     result = list(cursor)
-                    print(json.dumps(result, indent=2, ensure_ascii=False))
+                    print(json_util.dumps(result, indent=2, ensure_ascii=False))
                 elif method == 'insert_one':
                     result = coll.insert_one(*args)
                     print(f"Inserted: {result.inserted_id}")
