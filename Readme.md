@@ -10,7 +10,7 @@ A Python command-line interface for MongoDB, inspired by SQL shells and designed
   - Command history and editing.
   - Graceful exit (`exit` or `quit`).
 - **Configuration Management:**
-  - Store multiple connections in `~/.mongo_cli.conf`.
+  - Store multiple connections in `~/.pymdbsh.conf`.
   - Switch between connections with `use <name>`.
   - Supports both `connection_string` and host/port authentication.
 - **Query Execution:**
@@ -22,8 +22,10 @@ A Python command-line interface for MongoDB, inspired by SQL shells and designed
   - Use variables in queries: `db.users.find({"_id": "$user_id"})`
   - Define aliases: `alias get_users = db.users.find({})`
 - **Piping and Redirection:**
-  - Pipe output to shell commands: `db.users.find({}) | grep "Alice"`
-  - Redirect output to files: `db.users.find({}) > users.json`
+  - **Pipe output to shell commands:** `db.users.find({}) | grep "Alice"`
+    - Only the output from the last command in the pipe is shown.
+    - Output is piped as JSON using BSON-safe serialization.
+  - **Redirect output to files:** `db.users.find({}) > users.json`
 - **Advanced SQL-to-Mongo Translation:**
   - Supports `SELECT *` for all fields.
   - Supports `WHERE` with `=`, `!=`, `>`, `<`, `>=`, `<=`, and boolean values.
@@ -56,7 +58,7 @@ db.users.find({"age": {"$gt": 21}}).sort([("age", -1)]).limit(5)
 
 ### 1. Configuration
 
-Create `~/.mongo_cli.conf`:
+Create `~/.pymdbsh.conf`:
 
 ```ini
 [default]
@@ -104,11 +106,13 @@ python pymdbsh.py
   ```
   mongo> get_user_by_id
   ```
-- Pipe output:
+- **Pipe output:**
   ```
   mongo> db.users.find({}) | grep "Alice"
+  mongo> SELECT * FROM users LIMIT 2 | jq '.[] | .name'
   ```
-- Redirect output:
+  - Only the output from the last command in the pipe is shown.
+- **Redirect output:**
   ```
   mongo> db.users.find({}) > users.json
   ```

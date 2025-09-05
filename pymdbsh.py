@@ -159,7 +159,7 @@ class MongoCLI:
             cmd, filename = line.split('>', 1)
             cmd = cmd.strip()
             filename = filename.strip()
-            result = self.execute_command(cmd, return_result=True)
+            result = self.execute_command(cmd, return_result=True, suppress_output=True)
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(json_util.dumps(result, indent=2, ensure_ascii=False))
             print(f"Output written to {filename}")
@@ -167,12 +167,11 @@ class MongoCLI:
             cmd, pipe_cmd = line.split('|', 1)
             cmd = cmd.strip()
             pipe_cmd = pipe_cmd.strip()
-            result = self.execute_command(cmd, return_result=True)
+            result = self.execute_command(cmd, return_result=True, suppress_output=True)
             proc = subprocess.Popen(shlex.split(pipe_cmd), stdin=subprocess.PIPE)
-            # Use json_util.dumps for BSON compatibility
             proc.communicate(input=json_util.dumps(result, indent=2, ensure_ascii=False).encode('utf-8'))
 
-    def execute_command(self, command, return_result=False):
+    def execute_command(self, command, return_result=False, suppress_output=False):
         # SQL translation
         if command.strip().upper().startswith("SELECT"):
             sql_result = sql_to_mongo(command)
@@ -187,14 +186,16 @@ class MongoCLI:
                     if limit:
                         cursor = cursor.limit(limit)
                     result = list(cursor)
-                    print(json_util.dumps(result, indent=2, ensure_ascii=False))
+                    if not suppress_output:
+                        print(json_util.dumps(result, indent=2, ensure_ascii=False))
                     if return_result:
                         return result
             else:
                 return
         # Handle db command
         if command.strip() == 'db':
-            print(self.db.name)
+            if not suppress_output:
+                print(self.db.name)
             if return_result:
                 return self.db.name
             return
@@ -204,11 +205,13 @@ class MongoCLI:
                 # Parse collection and method
                 rest = command[3:]
                 if '.' not in rest:
-                    print("Invalid command.")
+                    if not suppress_output:
+                        print("Invalid command.")
                     return
                 collection, rest = rest.split('.', 1)
                 if '(' not in rest or not rest.endswith(')'):
-                    print("Invalid command.")
+                    if not suppress_output:
+                        print("Invalid command.")
                     return
                 method, argstr = rest.split('(', 1)
                 argstr = argstr[:-1]  # Remove trailing ')'
@@ -221,35 +224,42 @@ class MongoCLI:
                         try:
                             args = [eval(argstr)]
                         except Exception:
-                            print("Invalid argument format.")
+                            if not suppress_output:
+                                print("Invalid argument format.")
                             return
                 coll = self.db[collection]
                 result = None
                 if method == 'find':
                     cursor = coll.find(*args)
                     result = list(cursor)
-                    print(json_util.dumps(result, indent=2, ensure_ascii=False))
+                    if not suppress_output:
+                        print(json_util.dumps(result, indent=2, ensure_ascii=False))
                 elif method == 'insert_one':
                     result = coll.insert_one(*args)
-                    print(f"Inserted: {result.inserted_id}")
+                    if not suppress_output:
+                        print(f"Inserted: {result.inserted_id}")
                     result = {"inserted_id": str(result.inserted_id)}
                 elif method == 'delete_one':
                     result = coll.delete_one(*args)
-                    print(f"Deleted: {result.deleted_count}")
+                    if not suppress_output:
+                        print(f"Deleted: {result.deleted_count}")
                     result = {"deleted_count": result.deleted_count}
                 elif method == 'update_one':
                     result = coll.update_one(*args)
-                    print(f"Matched: {result.matched_count}, Modified: {result.modified_count}")
+                    if not suppress_output:
+                        print(f"Matched: {result.matched_count}, Modified: {result.modified_count}")
                     result = {"matched_count": result.matched_count, "modified_count": result.modified_count}
                 else:
-                    print("Unsupported method.")
-                    return
+                    if not suppress_output:
+                        print("Unsupported method.")
                 if return_result:
                     return result
             else:
-                print("Unknown command.")
+                if not suppress_output:
+                    print("Unknown command.")
         except Exception as e:
-            print(f"MongoDB error: {e}")
+            if not suppress_output:
+                print(f"MongoDB error: {e}")
 
 def sql_to_mongo(sql):
     # Example: SELECT * FROM users WHERE age > 21 ORDER BY age DESC LIMIT 5
