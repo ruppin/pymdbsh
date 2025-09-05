@@ -248,19 +248,30 @@ class MongoCLI:
             print(f"MongoDB error: {e}")
 
 def sql_to_mongo(sql):
-    # Example: SELECT * FROM users WHERE age > 21
+    # Example: SELECT * FROM users WHERE age > 21 ORDER BY age DESC LIMIT 5
+    # Regex to capture SELECT ... FROM ... [WHERE ...] [ORDER BY ...] [LIMIT ...]
     match = re.match(
-        r"SELECT\s+(.+)\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+))?", sql, re.IGNORECASE
+        r"SELECT\s+(.+)\s+FROM\s+(\w+)"
+        r"(?:\s+WHERE\s+(.+?))?"
+        r"(?:\s+ORDER\s+BY\s+([\w\.]+)(?:\s+(ASC|DESC))?)?"
+        r"(?:\s+LIMIT\s+(\d+))?$",
+        sql, re.IGNORECASE
     )
     if not match:
         print("Unsupported SQL syntax.")
         return None
+
     fields = match.group(1).replace(' ', '').split(',')
     collection = match.group(2)
     where_clause = match.group(3)
+    order_by_field = match.group(4)
+    order_by_dir = match.group(5)
+    limit_val = match.group(6)
 
     filter_doc = {}
     projection = None
+    sort = None
+    limit = None
 
     # Handle SELECT * (no projection)
     if len(fields) == 1 and fields[0] == '*':
@@ -272,7 +283,6 @@ def sql_to_mongo(sql):
         # Supports AND, =, !=, >, <, >=, <=, and boolean values
         conditions = [c.strip() for c in re.split(r"\s+AND\s+", where_clause, flags=re.IGNORECASE)]
         for cond in conditions:
-            # Equality: field = 'value' or field = "value"
             eq_match = re.match(r"([\w\.]+)\s*=\s*'([^']*)'", cond)
             if eq_match:
                 key = eq_match.group(1)
@@ -285,14 +295,12 @@ def sql_to_mongo(sql):
                 value = eq_match.group(2)
                 filter_doc[key] = value
                 continue
-            # Boolean: field = true/false
             bool_match = re.match(r"([\w\.]+)\s*=\s*(true|false)", cond, re.IGNORECASE)
             if bool_match:
                 key = bool_match.group(1)
                 value = bool_match.group(2).lower() == "true"
                 filter_doc[key] = value
                 continue
-            # Not equal: field != 'value' or field != "value"
             ne_match = re.match(r"([\w\.]+)\s*!=\s*'([^']*)'", cond)
             if ne_match:
                 key = ne_match.group(1)
@@ -305,19 +313,16 @@ def sql_to_mongo(sql):
                 value = ne_match.group(2)
                 filter_doc[key] = {"$ne": value}
                 continue
-            # Not equal boolean
             ne_bool_match = re.match(r"([\w\.]+)\s*!=\s*(true|false)", cond, re.IGNORECASE)
             if ne_bool_match:
                 key = ne_bool_match.group(1)
                 value = ne_bool_match.group(2).lower() == "true"
                 filter_doc[key] = {"$ne": value}
                 continue
-            # Greater than: field > value
             gt_match = re.match(r"([\w\.]+)\s*>\s*([^\s]+)", cond)
             if gt_match:
                 key = gt_match.group(1)
                 value = gt_match.group(2)
-                # Try to convert to int/float if possible
                 try:
                     value = int(value)
                 except ValueError:
@@ -327,7 +332,6 @@ def sql_to_mongo(sql):
                         pass
                 filter_doc[key] = {"$gt": value}
                 continue
-            # Less than: field < value
             lt_match = re.match(r"([\w\.]+)\s*<\s*([^\s]+)", cond)
             if lt_match:
                 key = lt_match.group(1)
@@ -341,7 +345,6 @@ def sql_to_mongo(sql):
                         pass
                 filter_doc[key] = {"$lt": value}
                 continue
-            # Greater than or equal: field >= value
             gte_match = re.match(r"([\w\.]+)\s*>=\s*([^\s]+)", cond)
             if gte_match:
                 key = gte_match.group(1)
@@ -355,7 +358,6 @@ def sql_to_mongo(sql):
                         pass
                 filter_doc[key] = {"$gte": value}
                 continue
-            # Less than or equal: field <= value
             lte_match = re.match(r"([\w\.]+)\s*<=\s*([^\s]+)", cond)
             if lte_match:
                 key = lte_match.group(1)
@@ -371,12 +373,18 @@ def sql_to_mongo(sql):
                 continue
             print(f"Unsupported WHERE condition: {cond}")
 
-    # If projection is None, don't pass it to find()
-    if projection is None:
-        return  collection, 'find', [filter_doc]
-    else:
-        return collection, 'find', [filter_doc, projection]
+    # ORDER BY
+    if order_by_field:
+        direction = -1 if order_by_dir and order_by_dir.upper() == "DESC" else 1
+        sort = [(order_by_field, direction)]
 
-if __name__ == '__main__':
-    cli = MongoCLI('~/.pymdbsh.conf')
-    cli.run_session()
+    # LIMIT
+    if limit_val:
+        limit = int(limit_val)
+
+    # Return all options for execution
+    # [filter, projection, sort, limit]
+    args = [filter_doc]
+    if projection is not None:
+        args.append(projection)
+    return collection, 'find', args, sort, limit
