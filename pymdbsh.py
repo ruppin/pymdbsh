@@ -248,7 +248,7 @@ class MongoCLI:
             print(f"MongoDB error: {e}")
 
 def sql_to_mongo(sql):
-    # Example: SELECT address.city FROM users WHERE address.city = 'NY' AND age > 21 AND active = true
+    # Example: SELECT * FROM users WHERE age > 21
     match = re.match(
         r"SELECT\s+(.+)\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+))?", sql, re.IGNORECASE
     )
@@ -259,8 +259,14 @@ def sql_to_mongo(sql):
     collection = match.group(2)
     where_clause = match.group(3)
 
-    projection = {field: 1 for field in fields}
     filter_doc = {}
+    projection = None
+
+    # Handle SELECT * (no projection)
+    if len(fields) == 1 and fields[0] == '*':
+        projection = None
+    else:
+        projection = {field: 1 for field in fields}
 
     if where_clause:
         # Supports AND, =, !=, >, <, >=, <=, and boolean values
@@ -364,8 +370,12 @@ def sql_to_mongo(sql):
                 filter_doc[key] = {"$lte": value}
                 continue
             print(f"Unsupported WHERE condition: {cond}")
-    #mongo_cmd = f"db.{collection}.find({json.dumps(filter_doc)}, {json.dumps(projection)})"
-    return  collection, 'find', [filter_doc, projection]
+
+    # If projection is None, don't pass it to find()
+    if projection is None:
+        return  collection, 'find', [filter_doc]
+    else:
+        return collection, 'find', [filter_doc, projection]
 
 if __name__ == '__main__':
     cli = MongoCLI('~/.pymdbsh.conf')
