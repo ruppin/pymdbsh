@@ -169,7 +169,8 @@ class MongoCLI:
             pipe_cmd = pipe_cmd.strip()
             result = self.execute_command(cmd, return_result=True)
             proc = subprocess.Popen(shlex.split(pipe_cmd), stdin=subprocess.PIPE)
-            proc.communicate(input=json.dumps(result, indent=2, ensure_ascii=False).encode('utf-8'))
+            # Use json_util.dumps for BSON compatibility
+            proc.communicate(input=json_util.dumps(result, indent=2, ensure_ascii=False).encode('utf-8'))
 
     def execute_command(self, command, return_result=False):
         # SQL translation
