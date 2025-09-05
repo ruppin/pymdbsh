@@ -174,10 +174,18 @@ class MongoCLI:
     def execute_command(self, command, return_result=False):
         # SQL translation
         if command.strip().upper().startswith("SELECT"):
-            mongo_cmd = sql_to_mongo(command)
-            if mongo_cmd:
-                print(f"Translated to: {mongo_cmd}")
-                command = mongo_cmd
+            sql_result = sql_to_mongo(command)
+            if sql_result:
+                collection, method, args = sql_result
+                coll = self.db[collection]
+                result = None
+                if method == 'find':
+                    cursor = coll.find(*args)
+                    result = list(cursor)
+                    print(json_util.dumps(result, indent=2, ensure_ascii=False))
+                    if return_result:
+                        return result
+                return
             else:
                 return
         # Handle db command
@@ -356,8 +364,8 @@ def sql_to_mongo(sql):
                 filter_doc[key] = {"$lte": value}
                 continue
             print(f"Unsupported WHERE condition: {cond}")
-    mongo_cmd = f"db.{collection}.find({json.dumps(filter_doc)}, {json.dumps(projection)})"
-    return mongo_cmd
+    #mongo_cmd = f"db.{collection}.find({json.dumps(filter_doc)}, {json.dumps(projection)})"
+    return  collection, 'find', [filter_doc, projection]
 
 if __name__ == '__main__':
     cli = MongoCLI('~/.pymdbsh.conf')
