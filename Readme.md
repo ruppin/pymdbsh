@@ -12,10 +12,11 @@ A Python command-line interface for MongoDB, inspired by SQL shells and designed
 - **Configuration Management:**
   - Store multiple connections in `~/.mongo_cli.conf`.
   - Switch between connections with `use <name>`.
+  - Supports both `connection_string` and host/port authentication.
 - **Query Execution:**
   - Direct MongoDB syntax: `db.collection.find({...})`
-  - SQL-like syntax: `SELECT field FROM collection WHERE ...` (auto-translated)
-  - Pretty-printed JSON output.
+  - SQL-like syntax: `SELECT field FROM collection WHERE ... ORDER BY ... LIMIT ...` (auto-translated)
+  - Pretty-printed JSON output (handles `datetime` and BSON types).
 - **Variables and Aliases:**
   - Define variables: `set user_id = 123`
   - Use variables in queries: `db.users.find({"_id": "$user_id"})`
@@ -23,23 +24,30 @@ A Python command-line interface for MongoDB, inspired by SQL shells and designed
 - **Piping and Redirection:**
   - Pipe output to shell commands: `db.users.find({}) | grep "Alice"`
   - Redirect output to files: `db.users.find({}) > users.json`
+- **Advanced SQL-to-Mongo Translation:**
+  - Supports `SELECT *` for all fields.
+  - Supports `WHERE` with `=`, `!=`, `>`, `<`, `>=`, `<=`, and boolean values.
+  - Supports `ORDER BY field [ASC|DESC]`.
+  - Supports `LIMIT n`.
 
 ---
 
 ## SQL-to-Mongo Translation
 
 - **Supported SQL:**
+  - `SELECT * FROM collection`
   - `SELECT field1,field2 FROM collection`
   - `SELECT field FROM collection WHERE field = 'value'`
-  - Supports `AND`, `=`, `!=`, `>`, `<`, `>=`, `<=`, and boolean values in WHERE clause.
+  - `SELECT * FROM collection WHERE age > 21 ORDER BY age DESC LIMIT 5`
+  - Supports `AND` in WHERE clause.
 
 **Examples:**
 ```
-SELECT name,age FROM users WHERE age > 21 AND active = true
+SELECT * FROM users WHERE age > 21 ORDER BY age DESC LIMIT 5
 ```
 Translates to:
 ```
-db.users.find({"age": {"$gt": 21}, "active": true}, {"name": 1, "age": 1})
+db.users.find({"age": {"$gt": 21}}).sort([("age", -1)]).limit(5)
 ```
 
 ---
@@ -56,6 +64,10 @@ host = localhost
 port = 27017
 database = test
 
+[atlas]
+connection_string = mongodb+srv://user:pass@cluster0.mongodb.net/mydb?retryWrites=true&w=majority
+database = mydb
+
 [variables]
 user_id = 123
 
@@ -67,7 +79,7 @@ get_user_by_id = db.users.find({"_id": "$user_id"})
 ### 2. Start the CLI
 
 ```sh
-python pymdb.py
+python pymdbsh.py
 ```
 
 ### 3. Example Commands
@@ -82,7 +94,7 @@ python pymdb.py
   ```
 - SQL-like query:
   ```
-  mongo> SELECT name FROM users WHERE age >= 18 AND active != false
+  mongo> SELECT name FROM users WHERE age >= 18 AND active != false ORDER BY name ASC LIMIT 10
   ```
 - Set variable:
   ```
@@ -102,7 +114,7 @@ python pymdb.py
   ```
 - Switch connection:
   ```
-  mongo> use default
+  mongo> use atlas
   ```
 - Exit:
   ```
@@ -116,10 +128,14 @@ python pymdb.py
 - Python 3.10+
 - pymongo
 - prompt_toolkit
+- dnspython (for SRV connection strings)
+- bson (comes with pymongo)
 
 Install dependencies:
 ```sh
-pip install pymongo prompt_toolkit
+pip install pymongo prompt_toolkit dnspython
 ```
 
 ---
+
+## License

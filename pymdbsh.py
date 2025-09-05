@@ -176,16 +176,19 @@ class MongoCLI:
         if command.strip().upper().startswith("SELECT"):
             sql_result = sql_to_mongo(command)
             if sql_result:
-                collection, method, args = sql_result
+                collection, method, args, sort, limit = sql_result
                 coll = self.db[collection]
                 result = None
                 if method == 'find':
                     cursor = coll.find(*args)
+                    if sort:
+                        cursor = cursor.sort(sort)
+                    if limit:
+                        cursor = cursor.limit(limit)
                     result = list(cursor)
                     print(json_util.dumps(result, indent=2, ensure_ascii=False))
                     if return_result:
                         return result
-                return
             else:
                 return
         # Handle db command
@@ -388,3 +391,6 @@ def sql_to_mongo(sql):
     if projection is not None:
         args.append(projection)
     return collection, 'find', args, sort, limit
+if __name__ == '__main__':
+    cli = MongoCLI('~/.pymdbsh.conf')
+    cli.run_session()
