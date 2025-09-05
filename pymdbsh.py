@@ -38,13 +38,21 @@ class MongoCLI:
                             v = v.replace(f"${var_k}", str(var_v))
                         aliases[k] = v
                 else:
-                    configs[section] = {
-                        'host': parser.get(section, 'host', fallback='localhost'),
-                        'port': parser.getint(section, 'port', fallback=27017),
-                        'username': parser.get(section, 'username', fallback=None),
-                        'password': parser.get(section, 'password', fallback=None),
-                        'database': parser.get(section, 'database', fallback=None)
-                    }
+                    # Support connection_string or host/port
+                    conn_string = parser.get(section, 'connection_string', fallback=None)
+                    if conn_string:
+                        configs[section] = {
+                            'connection_string': conn_string,
+                            'database': parser.get(section, 'database', fallback=None)
+                        }
+                    else:
+                        configs[section] = {
+                            'host': parser.get(section, 'host', fallback='localhost'),
+                            'port': parser.getint(section, 'port', fallback=27017),
+                            'username': parser.get(section, 'username', fallback=None),
+                            'password': parser.get(section, 'password', fallback=None),
+                            'database': parser.get(section, 'database', fallback=None)
+                        }
         self.variables = variables
         self.aliases = aliases
         return configs
