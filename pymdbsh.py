@@ -294,9 +294,22 @@ def sql_to_mongo(sql):
         projection = {field: 1 for field in fields}
 
     if where_clause:
-        # Supports AND, =, !=, >, <, >=, <=, and boolean values
+        # Supports AND, =, !=, >, <, >=, <=, IS NULL, IS NOT NULL, and boolean values
         conditions = [c.strip() for c in re.split(r"\s+AND\s+", where_clause, flags=re.IGNORECASE)]
         for cond in conditions:
+            # IS NULL
+            is_null_match = re.match(r"([\w\.]+)\s+IS\s+NULL", cond, re.IGNORECASE)
+            if is_null_match:
+                key = is_null_match.group(1)
+                filter_doc[key] = None
+                continue
+            # IS NOT NULL
+            is_not_null_match = re.match(r"([\w\.]+)\s+IS\s+NOT\s+NULL", cond, re.IGNORECASE)
+            if is_not_null_match:
+                key = is_not_null_match.group(1)
+                filter_doc[key] = {"$ne": None}
+                continue
+            # ...existing matches below...
             eq_match = re.match(r"([\w\.]+)\s*=\s*'([^']*)'", cond)
             if eq_match:
                 key = eq_match.group(1)
