@@ -182,15 +182,40 @@ class MongoCLI:
                 print(f"Error: {e}")
 
     def handle_pipe_redirect(self, line):
-        if '>' in line:
-            cmd, filename = line.split('>', 1)
-            cmd = cmd.strip()
-            filename = filename.strip()
+        # Only split on > if it is not inside quotes or parentheses
+        # This simple approach: split only on the last >, and only if not inside quotes
+        import re
+
+        def is_outside_quotes(s, idx):
+            in_single = in_double = False
+            for i, c in enumerate(s):
+                if c == "'" and not in_double:
+                    in_single = not in_single
+                elif c == '"' and not in_single:
+                    in_double = not in_double
+                if i == idx:
+                    return not in_single and not in_double
+            return True
+
+        # Find the last > that is outside quotes
+        gt_indices = [m.start() for m in re.finditer('>', line)]
+        split_idx = None
+        for idx in reversed(gt_indices):
+            if is_outside_quotes(line, idx):
+                split_idx = idx
+                break
+
+        if split_idx is not None:
+            cmd = line[:split_idx].strip()
+            filename = line[split_idx+1:].strip()
             result = self.execute_command(cmd, return_result=True, suppress_output=True)
             with open(filename, 'w', encoding='utf-8') as f:
                 f.write(json_util.dumps(result, indent=2, ensure_ascii=False))
             print(f"Output written to {filename}")
-        elif '|' in line:
+            return
+
+        # Fallback to pipe handling
+        if '|' in line:
             cmd, pipe_cmd = line.split('|', 1)
             cmd = cmd.strip()
             pipe_cmd = pipe_cmd.strip()
