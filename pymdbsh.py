@@ -182,26 +182,29 @@ class MongoCLI:
                 print(f"Error: {e}")
 
     def handle_pipe_redirect(self, line):
-        # Only split on > if it is not inside quotes or parentheses
-        # This simple approach: split only on the last >, and only if not inside quotes
         import re
 
-        def is_outside_quotes(s, idx):
+        def is_outside_quotes_and_parens(s, idx):
             in_single = in_double = False
+            paren_level = 0
             for i, c in enumerate(s):
                 if c == "'" and not in_double:
                     in_single = not in_single
                 elif c == '"' and not in_single:
                     in_double = not in_double
+                elif c == '(' and not in_single and not in_double:
+                    paren_level += 1
+                elif c == ')' and not in_single and not in_double:
+                    paren_level = max(paren_level - 1, 0)
                 if i == idx:
-                    return not in_single and not in_double
+                    return not in_single and not in_double and paren_level == 0
             return True
 
-        # Find the last > that is outside quotes
+        # Find the last > that is outside quotes and parentheses
         gt_indices = [m.start() for m in re.finditer('>', line)]
         split_idx = None
         for idx in reversed(gt_indices):
-            if is_outside_quotes(line, idx):
+            if is_outside_quotes_and_parens(line, idx):
                 split_idx = idx
                 break
 
