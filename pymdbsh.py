@@ -88,7 +88,7 @@ class MongoCLI:
         while True:
             try:
                 # Show connection and DB in prompt
-                prompt_str = f"[{self.current_conn}/{self.db.name if self.db else '?'}] mongo> "
+                prompt_str = f"[{self.current_conn}/{self.db.name if self.db is not None else '?'}] mongo> "
                 line = session.prompt(prompt_str).strip()
                 if not line:
                     continue
@@ -212,8 +212,7 @@ class MongoCLI:
                         print(json_util.dumps(result, indent=2, ensure_ascii=False))
                     if return_result:
                         return result
-            else:
-                return
+            return
         # Handle db command
         if command.strip() == 'db':
             if not suppress_output:
