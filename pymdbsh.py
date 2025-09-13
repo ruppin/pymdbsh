@@ -212,7 +212,14 @@ class MongoCLI:
                         print(json_util.dumps(result, indent=2, ensure_ascii=False))
                     if return_result:
                         return result
-            return
+                if method == 'aggregate':
+                    cursor = coll.aggregate(*args)
+                    result = list(cursor)
+                    if not suppress_output:
+                        print(json_util.dumps(result, indent=2, ensure_ascii=False))
+                    if return_result:
+                        return result
+                return
         # Handle db command
         if command.strip() == 'db':
             if not suppress_output:
@@ -295,7 +302,84 @@ class MongoCLI:
         return re.sub(r'`([^`]+)`', repl, text)
 
 def sql_to_mongo(sql):
-    # Example: SELECT * FROM users WHERE age > 21 ORDER BY age DESC LIMIT 5
+    # Extended regex to capture JOIN
+    join_match = re.match(
+        r"SELECT\s+(.+)\s+FROM\s+(\w+)(?:\s+(\w+))?\s+JOIN\s+(\w+)(?:\s+(\w+))?\s+ON\s+([\w\.]+)\s*=\s*([\w\.]+)(?:\s+WHERE\s+(.+?))?(?:\s+ORDER\s+BY\s+([\w\.]+)(?:\s+(ASC|DESC))?)?(?:\s+LIMIT\s+(\d+))?$",
+        sql, re.IGNORECASE
+    )
+    if join_match:
+        fields = join_match.group(1).replace(' ', '').split(',')
+        left_coll = join_match.group(2)
+        left_alias = join_match.group(3) or left_coll
+        right_coll = join_match.group(4)
+        right_alias = join_match.group(5) or right_coll
+        left_key = join_match.group(6)
+        right_key = join_match.group(7)
+        where_clause = join_match.group(8)
+        order_by_field = join_match.group(9)
+        order_by_dir = join_match.group(10)
+        limit_val = join_match.group(11)
+
+        # Build $lookup
+        lookup_stage = {
+            "$lookup": {
+                "from": right_coll,
+                "localField": left_key.split('.')[-1],
+                "foreignField": right_key.split('.')[-1],
+                "as": right_alias
+            }
+        }
+        # Optionally, $unwind if you expect one-to-one
+        unwind_stage = {"$unwind": f"${right_alias}"}
+
+        # Build $project
+        project = {}
+        if len(fields) == 1 and fields[0] == '*':
+            project = None
+        else:
+            for field in fields:
+                if '.' in field:
+                    alias, fname = field.split('.', 1)
+                    project[f"{alias}.{fname}"] = 1
+                else:
+                    project[field] = 1
+
+        pipeline = [lookup_stage, unwind_stage]
+
+        # WHERE clause (only simple ANDs supported)
+        if where_clause:
+            filter_doc = {}
+            conditions = [c.strip() for c in re.split(r"\s+AND\s+", where_clause, flags=re.IGNORECASE)]
+            for cond in conditions:
+                # Only support left_alias.field or right_alias.field
+                m = re.match(r"(\w+)\.(\w+)\s*=\s*'([^']*)'", cond)
+                if m:
+                    alias, key, value = m.groups()
+                    filter_doc[f"{alias}.{key}"] = value
+                    continue
+                m = re.match(r"(\w+)\.(\w+)\s*=\s*(\d+)", cond)
+                if m:
+                    alias, key, value = m.groups()
+                    filter_doc[f"{alias}.{key}"] = int(value)
+                    continue
+                # Add more condition parsing as needed
+            if filter_doc:
+                pipeline.append({"$match": filter_doc})
+
+        if project:
+            pipeline.append({"$project": project})
+
+        # ORDER BY
+        if order_by_field:
+            direction = -1 if order_by_dir and order_by_dir.upper() == "DESC" else 1
+            pipeline.append({"$sort": {order_by_field: direction}})
+        # LIMIT
+        if limit_val:
+            pipeline.append({"$limit": int(limit_val)})
+
+        return left_coll, 'aggregate', [pipeline], None, None
+
+    # Fallback to original SELECT (no join)
     # Regex to capture SELECT ... FROM ... [WHERE ...] [ORDER BY ...] [LIMIT ...]
     match = re.match(
         r"SELECT\s+(.+)\s+FROM\s+(\w+)"
