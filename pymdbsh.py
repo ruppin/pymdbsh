@@ -104,7 +104,12 @@ class MongoCLI:
                     cmd_line = self.substitute_vars(cmd_line)
                     # Command substitution
                     cmd_line = self.substitute_commands(cmd_line)
+                    #clear screen
+                    if cmd_line.lower() == 'clear':
+                        os.system('cls' if os.name == 'nt' else 'clear')
+                    continue
                     # Handle exit
+
                     if cmd_line.lower() in ['exit', 'quit']:
                         print("Bye!")
                         return
