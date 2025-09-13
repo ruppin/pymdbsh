@@ -84,11 +84,12 @@ class MongoCLI:
         return text
 
     def run_session(self):
-        print(f"Connected to: {self.current_conn}")
         session = PromptSession(history=FileHistory('mongo_cli_history.txt'))
         while True:
             try:
-                line = session.prompt('mongo> ').strip()
+                # Show connection and DB in prompt
+                prompt_str = f"[{self.current_conn}/{self.db.name if self.db else '?'}] mongo> "
+                line = session.prompt(prompt_str).strip()
                 if not line:
                     continue
                 # Multiple commands separated by ;
@@ -107,8 +108,8 @@ class MongoCLI:
                     if cmd_line.lower() in ['exit', 'quit']:
                         print("Bye!")
                         return
-                    # Handle connection switching
-                    if cmd_line.startswith('use '):
+                    # Handle connection switching with 'switch'
+                    if cmd_line.startswith('switch '):
                         conn = cmd_line.split(' ', 1)[1].strip()
                         if conn in self.configs:
                             self.connect(conn)
@@ -116,11 +117,30 @@ class MongoCLI:
                         else:
                             print(f"Connection '{conn}' not found.")
                         continue
+                    # Handle 'use' for connection or database
+                    if cmd_line.startswith('use '):
+                        name = cmd_line.split(' ', 1)[1].strip()
+                        # First, check if it's a connection name
+                        if name in self.configs:
+                            self.connect(name)
+                            print(f"Switched to connection: {name}")
+                        else:
+                            # Try to switch database within the current connection
+                            if self.client:
+                                try:
+                                    self.db = self.client[name]
+                                    print(f"Switched to database: {name}")
+                                except Exception:
+                                    print(f"No database by the name '{name}' in the current connection.")
+                            else:
+                                print(f"No connection or database by the name '{name}'.")
+                        continue
                     # Show connections
                     if cmd_line == 'show connections':
                         print("Configured connections:")
                         for conn in self.configs:
-                            print(f"  {conn}")
+                            marker = " (current)" if conn == self.current_conn else ""
+                            print(f"  {conn}{marker}")
                         continue
                     # Show variables
                     if cmd_line == 'show vars':
