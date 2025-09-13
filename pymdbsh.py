@@ -107,7 +107,7 @@ class MongoCLI:
                     #clear screen
                     if cmd_line.lower() == 'clear':
                         os.system('cls' if os.name == 'nt' else 'clear')
-                    continue
+                        continue
                     # Handle exit
 
                     if cmd_line.lower() in ['exit', 'quit']:
@@ -324,7 +324,7 @@ def sql_to_mongo(sql):
         order_by_field = join_match.group(9)
         order_by_dir = join_match.group(10)
         limit_val = join_match.group(11)
-
+        print ("join detected")
         # Build $lookup
         lookup_stage = {
             "$lookup": {
@@ -385,10 +385,11 @@ def sql_to_mongo(sql):
         return left_coll, 'aggregate', [pipeline], None, None
 
     # Fallback to original SELECT (no join)
-    # Regex to capture SELECT ... FROM ... [WHERE ...] [ORDER BY ...] [LIMIT ...]
+    # Regex to capture SELECT ... FROM ... [WHERE ...] [GROUP BY ...] [ORDER BY ...] [LIMIT ...]
     match = re.match(
         r"SELECT\s+(.+)\s+FROM\s+(\w+)"
         r"(?:\s+WHERE\s+(.+?))?"
+        r"(?:\s+GROUP\s+BY\s+([\w\.]+))?"
         r"(?:\s+ORDER\s+BY\s+([\w\.]+)(?:\s+(ASC|DESC))?)?"
         r"(?:\s+LIMIT\s+(\d+))?$",
         sql, re.IGNORECASE
@@ -400,9 +401,10 @@ def sql_to_mongo(sql):
     fields = match.group(1).replace(' ', '').split(',')
     collection = match.group(2)
     where_clause = match.group(3)
-    order_by_field = match.group(4)
-    order_by_dir = match.group(5)
-    limit_val = match.group(6)
+    group_by_field = match.group(4)
+    order_by_field = match.group(5)
+    order_by_dir = match.group(6)
+    limit_val = match.group(7)
 
     filter_doc = {}
     projection = None
@@ -413,8 +415,9 @@ def sql_to_mongo(sql):
     if len(fields) == 1 and fields[0] == '*':
         projection = None
     else:
-        projection = {field: 1 for field in fields}
+        projection = {field: 1 for field in fields if field != 'COUNT(*)'}
 
+    # WHERE clause (same as before)
     if where_clause:
         # Supports AND, =, !=, >, <, >=, <=, IS NULL, IS NOT NULL, and boolean values
         conditions = [c.strip() for c in re.split(r"\s+AND\s+", where_clause, flags=re.IGNORECASE)]
@@ -522,17 +525,47 @@ def sql_to_mongo(sql):
                 continue
             print(f"Unsupported WHERE condition: {cond}")
 
-    # ORDER BY
+    # GROUP BY support
+    if group_by_field:
+        pipeline = []
+        if where_clause and filter_doc:
+            pipeline.append({"$match": filter_doc})
+        group_stage = {
+            "$group": {
+                "_id": f"${group_by_field}",
+                "count": {"$sum": 1}
+            }
+        }
+        # If user selects other fields, add them to $first
+        for field in fields:
+            if field not in ('COUNT(*)', group_by_field):
+                group_stage["$group"][field] = {"$first": f"${field}"}
+        pipeline.append(group_stage)
+        # Project output fields
+        project_stage = {"$project": {group_by_field: "$_id", "count": 1}}
+        for field in fields:
+            if field not in ('COUNT(*)', group_by_field):
+                project_stage["$project"][field] = 1
+        pipeline.append(project_stage)
+        # ORDER BY
+        if order_by_field:
+            direction = -1 if order_by_dir and order_by_dir.upper() == "DESC" else 1
+            pipeline.append({"$sort": {order_by_field: direction}})
+        # LIMIT
+        if limit_val:
+            pipeline.append({"$limit": int(limit_val)})
+        return collection, 'aggregate', [pipeline], None, None
+
+    # ORDER BY (for non-grouped queries)
     if order_by_field:
         direction = -1 if order_by_dir and order_by_dir.upper() == "DESC" else 1
         sort = [(order_by_field, direction)]
 
-    # LIMIT
+    # LIMIT (for non-grouped queries)
     if limit_val:
         limit = int(limit_val)
 
     # Return all options for execution
-    # [filter, projection, sort, limit]
     args = [filter_doc]
     if projection is not None:
         args.append(projection)
