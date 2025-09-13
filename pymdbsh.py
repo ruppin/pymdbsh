@@ -101,6 +101,8 @@ class MongoCLI:
                             cmd_line = f"{cmd} {extra}".strip()
                     # Variable substitution
                     cmd_line = self.substitute_vars(cmd_line)
+                    # Command substitution
+                    cmd_line = self.substitute_commands(cmd_line)
                     # Handle exit
                     if cmd_line.lower() in ['exit', 'quit']:
                         print("Bye!")
@@ -260,6 +262,18 @@ class MongoCLI:
         except Exception as e:
             if not suppress_output:
                 print(f"MongoDB error: {e}")
+
+    def substitute_commands(self, text):
+        # Find all backtick-enclosed commands and replace with their output
+        def repl(match):
+            cmd = match.group(1)
+            try:
+                output = subprocess.check_output(cmd, shell=True, text=True)
+                return output.strip()
+            except Exception as e:
+                return f"<error:{e}>"
+        # Replace all `...` with output
+        return re.sub(r'`([^`]+)`', repl, text)
 
 def sql_to_mongo(sql):
     # Example: SELECT * FROM users WHERE age > 21 ORDER BY age DESC LIMIT 5
