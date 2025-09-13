@@ -390,6 +390,7 @@ def sql_to_mongo(sql):
         r"SELECT\s+(.+)\s+FROM\s+(\w+)"
         r"(?:\s+WHERE\s+(.+?))?"
         r"(?:\s+GROUP\s+BY\s+([\w\.]+))?"
+        r"(?:\s+HAVING\s+(.+?))?"
         r"(?:\s+ORDER\s+BY\s+([\w\.]+)(?:\s+(ASC|DESC))?)?"
         r"(?:\s+LIMIT\s+(\d+))?$",
         sql, re.IGNORECASE
@@ -402,9 +403,10 @@ def sql_to_mongo(sql):
     collection = match.group(2)
     where_clause = match.group(3)
     group_by_field = match.group(4)
-    order_by_field = match.group(5)
-    order_by_dir = match.group(6)
-    limit_val = match.group(7)
+    having_clause = match.group(5)
+    order_by_field = match.group(6)
+    order_by_dir = match.group(7)
+    limit_val = match.group(8)
 
     filter_doc = {}
     projection = None
@@ -417,11 +419,19 @@ def sql_to_mongo(sql):
     else:
         projection = {field: 1 for field in fields if field != 'COUNT(*)'}
 
-    # WHERE clause (same as before)
+    # WHERE clause (add LIKE support)
     if where_clause:
-        # Supports AND, =, !=, >, <, >=, <=, IS NULL, IS NOT NULL, and boolean values
         conditions = [c.strip() for c in re.split(r"\s+AND\s+", where_clause, flags=re.IGNORECASE)]
         for cond in conditions:
+            # LIKE
+            like_match = re.match(r"([\w\.]+)\s+LIKE\s+'([^']+)'", cond, re.IGNORECASE)
+            if like_match:
+                key = like_match.group(1)
+                pattern = like_match.group(2)
+                # Convert SQL LIKE pattern to regex
+                regex = '^' + pattern.replace('%', '.*').replace('_', '.') + '$'
+                filter_doc[key] = {"$regex": regex}
+                continue
             # IS NULL
             is_null_match = re.match(r"([\w\.]+)\s+IS\s+NULL", cond, re.IGNORECASE)
             if is_null_match:
@@ -525,7 +535,7 @@ def sql_to_mongo(sql):
                 continue
             print(f"Unsupported WHERE condition: {cond}")
 
-    # GROUP BY support
+    # GROUP BY support with HAVING
     if group_by_field:
         pipeline = []
         if where_clause and filter_doc:
@@ -536,11 +546,27 @@ def sql_to_mongo(sql):
                 "count": {"$sum": 1}
             }
         }
-        # If user selects other fields, add them to $first
         for field in fields:
             if field not in ('COUNT(*)', group_by_field):
                 group_stage["$group"][field] = {"$first": f"${field}"}
         pipeline.append(group_stage)
+        # HAVING support (only for COUNT(*) for now)
+        if having_clause:
+            having_match = re.match(r"COUNT\(\*\)\s*([<>=!]+)\s*(\d+)", having_clause.strip(), re.IGNORECASE)
+            if having_match:
+                op, value = having_match.group(1), int(having_match.group(2))
+                mongo_op = {
+                    '=': '$eq',
+                    '==': '$eq',
+                    '!=': '$ne',
+                    '<>': '$ne',
+                    '>': '$gt',
+                    '>=': '$gte',
+                    '<': '$lt',
+                    '<=': '$lte'
+                }.get(op)
+                if mongo_op:
+                    pipeline.append({"$match": {"count": {f"${mongo_op}": value}}})
         # Project output fields
         project_stage = {"$project": {group_by_field: "$_id", "count": 1}}
         for field in fields:
