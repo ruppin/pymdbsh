@@ -367,15 +367,50 @@ def sql_to_mongo(sql):
 
         # Build $project
         project = {}
+
+        # Dynamically expand a.* and b.* using find_one()
+        left_fields = []
+        right_fields = []
         if len(fields) == 1 and fields[0] == '*':
             project = None
         else:
+            # You need access to self.db here, so pass it as an argument or use a global
+            from pymongo import MongoClient
+            # Assume self.db is available as db
+            # left_coll and right_coll are collection names
+            left_doc = None
+            right_doc = None
+            try:
+                left_doc = cli.db[left_coll].find_one() if hasattr(cli, 'db') else None
+            except Exception:
+                pass
+            try:
+                right_doc = cli.db[right_coll].find_one() if hasattr(cli, 'db') else None
+            except Exception:
+                pass
+            if left_doc:
+                left_fields = [k for k in left_doc.keys() if k != '_id']
+            if right_doc:
+                right_fields = [k for k in right_doc.keys() if k != '_id']
+
             for field in fields:
-                if '.' in field:
+                if field == f"{left_alias}.*":
+                    for lf in left_fields:
+                        project[lf] = 1
+                elif field == f"{right_alias}.*":
+                    for rf in right_fields:
+                        project[f"{right_alias}.{rf}"] = 1
+                elif '.' in field:
                     alias, fname = field.split('.', 1)
-                    project[f"{alias}.{fname}"] = 1
+                    if alias == left_alias:
+                        project[fname] = 1
+                    elif alias == right_alias:
+                        project[f"{right_alias}.{fname}"] = 1
                 else:
                     project[field] = 1
+
+        if project:
+            pipeline.append({"$project": project})
 
         pipeline = [lookup_stage, unwind_stage]
 
@@ -627,3 +662,6 @@ def sql_to_mongo(sql):
 if __name__ == '__main__':
     cli = MongoCLI('~/.pymdbsh.conf')
     cli.run_session()
+
+    #Join  syntax
+    #SELECT a.*, b.name FROM users a JOIN orders b ON a.user_id = b.user_id WHERE a.status = 'active'
