@@ -414,9 +414,11 @@ def sql_to_mongo(sql):
             filter_doc = {}
             conditions = [c.strip() for c in re.split(r"\s+AND\s+", where_clause, flags=re.IGNORECASE)]
             for cond in conditions:
+                print (f"condition is {cond}")
                 m = re.match(r"(\w+)\.(\w+)\s*=\s*'([^']*)'", cond)
                 if m:
                     alias, key, value = m.groups()
+                    print (f"alias={alias}, key={key}, value={value}")
                     # If alias is left_alias, use just the key (no prefix)
                     if alias == left_alias:
                         filter_doc[key] = value
@@ -426,12 +428,14 @@ def sql_to_mongo(sql):
                 m = re.match(r"(\w+)\.(\w+)\s*=\s*(\d+)", cond)
                 if m:
                     alias, key, value = m.groups()
+                    print (f"alias={alias}, key={key}, value={value}")
                     if alias == left_alias:
                         filter_doc[key] = int(value)
                     else:
                         filter_doc[f"{alias}.{key}"] = int(value)
                     continue
                 # Add more condition parsing as needed
+                print(f"filter_doc so far: {filter_doc}")
             if filter_doc:
                 pipeline.append({"$match": filter_doc})
 
