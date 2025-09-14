@@ -689,3 +689,7 @@ if __name__ == '__main__':
 
     #Join  syntax
     #SELECT a.*, b.name FROM users a JOIN orders b ON a.user_id = b.user_id WHERE a.status = 'active'
+
+    #Bugs
+        # Join where clause is not translating into match stage properly at the moment 
+        
