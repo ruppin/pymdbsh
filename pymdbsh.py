@@ -362,8 +362,8 @@ def sql_to_mongo(sql):
                 "as": right_alias
             }
         }
-        # Optionally, $unwind if you expect one-to-one
-        unwind_stage = {"$unwind": f"${right_alias}"}
+        # Use $unwind with preserveNullAndEmptyArrays: False for inner join
+        unwind_stage = {"$unwind": {"path": f"${right_alias}", "preserveNullAndEmptyArrays": False}}
 
         # Build $project
         project = {}
@@ -393,18 +393,18 @@ def sql_to_mongo(sql):
             for field in fields:
                 if field == f"{left_alias}.*":
                     for lf in left_fields:
-                        project[lf] = 1
+                        project[lf] = f"${lf}"
                 elif field == f"{right_alias}.*":
                     for rf in right_fields:
-                        project[f"{right_alias}.{rf}"] = 1
+                        project[f"{right_alias}.{rf}"] = f"${right_alias}.{rf}"
                 elif '.' in field:
                     alias, fname = field.split('.', 1)
                     if alias == left_alias:
-                        project[fname] = 1
+                        project[fname] = f"${fname}"
                     elif alias == right_alias:
-                        project[f"{right_alias}.{fname}"] = 1
+                        project[f"{right_alias}.{fname}"] = f"${right_alias}.{fname}"
                 else:
-                    project[field] = 1
+                    project[field] = f"${field}"
 
         # Initialize pipeline before appending to it!
         pipeline = [lookup_stage, unwind_stage]
