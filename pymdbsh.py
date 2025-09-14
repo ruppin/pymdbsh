@@ -412,9 +412,19 @@ def sql_to_mongo(sql):
         # WHERE clause (only simple ANDs supported)
         if where_clause:
             filter_doc = {}
+            
             conditions = [c.strip() for c in re.split(r"\s+AND\s+", where_clause, flags=re.IGNORECASE)]
             for cond in conditions:
                 print (f"condition is {cond}")
+                m = re.match(r"(\w+)\.(\w+)\s*=\s*(['\"])(.*?)\3", cond)
+                if m:
+                    alias, key, _, value = m.groups()
+                    # If alias is left_alias, use just the key (no prefix)
+                    if alias == left_alias:
+                        filter_doc[key] = value
+                    else:
+                        filter_doc[f"{alias}.{key}"] = value
+                    continue
                 m = re.match(r"(\w+)\.(\w+)\s*=\s*'([^']*)'", cond)
                 if m:
                     alias, key, value = m.groups()
@@ -512,7 +522,16 @@ def sql_to_mongo(sql):
                 key = is_not_null_match.group(1)
                 filter_doc[key] = {"$ne": None}
                 continue
-            # ...existing matches below...
+            # Try to match a.userid = 'value' or a.userid = "value"
+            m = re.match(r"(\w+)\.(\w+)\s*=\s*(['\"])(.*?)\3", cond)
+            if m:
+                alias, key, _, value = m.groups()
+                # If alias is left_alias, use just the key (no prefix)
+                if alias == left_alias:
+                    filter_doc[key] = value
+                else:
+                    filter_doc[f"{alias}.{key}"] = value
+                continue
             eq_match = re.match(r"([\w\.]+)\s*=\s*'([^']*)'", cond)
             if eq_match:
                 key = eq_match.group(1)
