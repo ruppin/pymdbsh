@@ -352,7 +352,7 @@ def sql_to_mongo(sql):
         order_by_field = join_match.group(9)
         order_by_dir = join_match.group(10)
         limit_val = join_match.group(11)
-        print ("join detected")
+        print("join detected")
         # Build $lookup
         lookup_stage = {
             "$lookup": {
@@ -374,10 +374,7 @@ def sql_to_mongo(sql):
         if len(fields) == 1 and fields[0] == '*':
             project = None
         else:
-            # You need access to self.db here, so pass it as an argument or use a global
             from pymongo import MongoClient
-            # Assume self.db is available as db
-            # left_coll and right_coll are collection names
             left_doc = None
             right_doc = None
             try:
@@ -409,9 +406,7 @@ def sql_to_mongo(sql):
                 else:
                     project[field] = 1
 
-        if project:
-            pipeline.append({"$project": project})
-
+        # Initialize pipeline before appending to it!
         pipeline = [lookup_stage, unwind_stage]
 
         # WHERE clause (only simple ANDs supported)
@@ -419,7 +414,6 @@ def sql_to_mongo(sql):
             filter_doc = {}
             conditions = [c.strip() for c in re.split(r"\s+AND\s+", where_clause, flags=re.IGNORECASE)]
             for cond in conditions:
-                # Only support left_alias.field or right_alias.field
                 m = re.match(r"(\w+)\.(\w+)\s*=\s*'([^']*)'", cond)
                 if m:
                     alias, key, value = m.groups()
