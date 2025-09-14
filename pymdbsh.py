@@ -417,12 +417,19 @@ def sql_to_mongo(sql):
                 m = re.match(r"(\w+)\.(\w+)\s*=\s*'([^']*)'", cond)
                 if m:
                     alias, key, value = m.groups()
-                    filter_doc[f"{alias}.{key}"] = value
+                    # If alias is left_alias, use just the key (no prefix)
+                    if alias == left_alias:
+                        filter_doc[key] = value
+                    else:
+                        filter_doc[f"{alias}.{key}"] = value
                     continue
                 m = re.match(r"(\w+)\.(\w+)\s*=\s*(\d+)", cond)
                 if m:
                     alias, key, value = m.groups()
-                    filter_doc[f"{alias}.{key}"] = int(value)
+                    if alias == left_alias:
+                        filter_doc[key] = int(value)
+                    else:
+                        filter_doc[f"{alias}.{key}"] = int(value)
                     continue
                 # Add more condition parsing as needed
             if filter_doc:
